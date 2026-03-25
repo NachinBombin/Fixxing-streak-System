@@ -1,59 +1,67 @@
-AddCSLuaFile("cl_init.lua")
-AddCSLuaFile("shared.lua")
-include('shared.lua')
+AddCSLuaFile( "cl_init.lua" )
+AddCSLuaFile( "shared.lua" )
+include( "shared.lua" )
 
-ENT.FireOnce = true;
+ENT.FireOnce = true
+
 
 function ENT:Freeze()
-	self.Entity:SetMoveType(MOVETYPE_NONE)
+	-- FIX: self.Entity:SetMoveType -> self:SetMoveType
+	self:SetMoveType( MOVETYPE_NONE )
 end
+
 
 function ENT:Explode()
-
-	local Ent = ents.Create("prop_combine_ball")
-	Ent:SetPos(self.Entity:GetPos())
+	local Ent = ents.Create( "prop_combine_ball" )
+	-- FIX: self.Entity:GetPos -> self:GetPos
+	Ent:SetPos( self:GetPos() )
 	Ent:Spawn()
 	Ent:Activate()
-	Ent:EmitSound("ambient/explosions/explode_3.wav")
-	Ent:Fire("explode", "", 0)
+	Ent:EmitSound( "ambient/explosions/explode_3.wav" )
+	Ent:Fire( "explode", "", 0 )
 
 	for i = 1, 8 do
-		local bomblet = ents.Create("sent_bomblet")
-		
-		bomblet:SetPos(self.Entity:GetPos())
-		bomblet:SetVar("owner",self.Owner);
-		bomblet:SetVar("FromCarePackage", self:GetVar("FromCarePackage",false))
+		local bomblet = ents.Create( "sent_bomblet" )
+		bomblet:SetPos( self:GetPos() )
+		-- FIX: bomblet:SetVar('owner'/'FromCarePackage') dead API -> direct table assign
+		bomblet.Owner           = self.Owner
+		bomblet.FromCarePackage = self:GetNWBool( "FromCarePackage", false )
 		bomblet:Spawn()
-				
+
 		local Phys = bomblet:GetPhysicsObject()
-		
 		if Phys:IsValid() then
 			Phys:Wake()
-			Phys:ApplyForceCenter(Vector(math.random(5-40, 40), math.random(5-40, 40), math.random(5-40, 40)) * Phys:GetMass())
+			Phys:ApplyForceCenter(
+				Vector( math.random( 5 - 40, 40 ), math.random( 5 - 40, 40 ), math.random( 5 - 40, 40 ) ) * Phys:GetMass()
+			)
 		end
 	end
-	
-	self.Entity:Remove();
+
+	-- FIX: self.Entity:Remove -> self:Remove()
+	self:Remove()
 end
 
+
 function ENT:Think()
-	if self:GetVar("HasBeenDropped",false) && self.FireOnce then
-		timer.Simple(1.5, function() self:Explode() end)
-		self.FireOnce = false;
+	-- FIX: self:GetVar('HasBeenDropped') dead API -> self.HasBeenDropped (set directly by jet)
+	if self.HasBeenDropped and self.FireOnce then
+		timer.Simple( 1.5, function() if IsValid( self ) then self:Explode() end end )
+		self.FireOnce = false
 	end
 end
 
+
 function ENT:Initialize()
-	self.Entity:SetModel( "models/military2/bomb/bomb_jdam.mdl" ); 
-	self.Entity:PhysicsInit(SOLID_VPHYSICS)
-	self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
-	self.Entity:SetSolid(SOLID_VPHYSICS)
-	
-	self.Owner = self.Entity:GetVar("owner")	
-	
-	self.FireOnce = true;
-	self.PhysObj = self.Entity:GetPhysicsObject()
-	if (self.PhysObj:IsValid()) then
+	-- FIX: self.Entity:SetModel/PhysicsInit/SetMoveType/SetSolid/GetPhysicsObject -> self:XXX
+	-- FIX: self.Owner = self.Entity:GetVar('owner') dead API -> removed (set by jet spawner)
+	self:SetModel( "models/military2/bomb/bomb_jdam.mdl" )
+	self:PhysicsInit( SOLID_VPHYSICS )
+	self:SetMoveType( MOVETYPE_VPHYSICS )
+	self:SetSolid( SOLID_VPHYSICS )
+
+	self.FireOnce = true
+	self.PhysObj  = self:GetPhysicsObject()
+	if self.PhysObj:IsValid() then
 		self.PhysObj:Wake()
 	end
 end
