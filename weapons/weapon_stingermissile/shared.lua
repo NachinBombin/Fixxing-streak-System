@@ -1,146 +1,151 @@
-if ( SERVER ) then
+if SERVER then
 	AddCSLuaFile( "shared.lua" )
-	SWEP.HoldType			= "shotgun"	
+	SWEP.HoldType = "shotgun"
 end
 
-if ( CLIENT ) then
-
-	SWEP.PrintName			= "Stinger"
-	SWEP.Author				= "Death dealer142"
-
-	SWEP.Slot				= 4
-	SWEP.SlotPos			= 7
-	//SWEP.IconLetter			= "x"
-
+if CLIENT then
+	SWEP.PrintName = "Stinger"
+	SWEP.Author    = "Death dealer142"
+	SWEP.Slot      = 4
+	SWEP.SlotPos   = 7
 end
-------------General Swep Info---------------
-SWEP.Author   = "Death dealer142"
-SWEP.Contact        = ""
-SWEP.Purpose        = "Destroy stuff"
-SWEP.Instructions   = "Hold secondary fire until lock, then fire"
+
+SWEP.Author       = "Death dealer142"
+SWEP.Contact      = ""
+SWEP.Purpose      = "Destroy stuff"
+SWEP.Instructions = "Hold secondary fire until lock, then fire"
 SWEP.Spawnable      = false
-SWEP.AdminSpawnable  = true
------------------------------------------------
+SWEP.AdminSpawnable = true
 
-------------Models---------------------------
-SWEP.ViewModel      = "models/weapons/v_rpg.mdl"
-SWEP.WorldModel   = "models/weapons/w_rocket_launcher.mdl"
------------------------------------------------
+SWEP.ViewModel  = "models/weapons/v_rpg.mdl"
+SWEP.WorldModel = "models/weapons/w_rocket_launcher.mdl"
 
--------------Primary Fire Attributes----------------------------------------
-SWEP.Primary.Delay			= 0.9 	--In seconds
-SWEP.Primary.Recoil			= 0		--Gun Kick
-SWEP.Primary.Damage			= 15	--Damage per Bullet
-SWEP.Primary.NumShots		= 1		--Number of shots per one fire
-SWEP.Primary.Cone			= 0 	--Bullet Spread
-SWEP.Primary.ClipSize		= 1	--Use "-1 if there are no clips"
-SWEP.Primary.DefaultClip	= 2	--Number of shots in next clip
-SWEP.Primary.Automatic   	= false	--Pistol fire (false) or SMG fire (true)
-SWEP.Primary.Ammo         	= "rpg_round"	--Ammo Type
--------------End Primary Fire Attributes------------------------------------
+SWEP.Primary.Delay        = 0.9
+SWEP.Primary.Recoil       = 0
+SWEP.Primary.Damage       = 15
+SWEP.Primary.NumShots     = 1
+SWEP.Primary.Cone         = 0
+SWEP.Primary.ClipSize     = 1
+SWEP.Primary.DefaultClip  = 2
+SWEP.Primary.Automatic    = false
+SWEP.Primary.Ammo         = "rpg_round"
 
--------------Secondary Fire Attributes-------------------------------------
-SWEP.Secondary.Delay		= 0.9
-SWEP.Secondary.Recoil		= 0
-SWEP.Secondary.Damage		= 0
-SWEP.Secondary.NumShots		= 1
-SWEP.Secondary.Cone			= 0
-SWEP.Secondary.ClipSize		= -1
-SWEP.Secondary.DefaultClip	= -1
-SWEP.Secondary.Automatic   	= true
-SWEP.Secondary.Ammo         = "none"
--------------End Secondary Fire Attributes--------------------------------
+SWEP.Secondary.Delay       = 0.9
+SWEP.Secondary.Recoil      = 0
+SWEP.Secondary.Damage      = 0
+SWEP.Secondary.NumShots    = 1
+SWEP.Secondary.Cone        = 0
+SWEP.Secondary.ClipSize    = -1
+SWEP.Secondary.DefaultClip = -1
+SWEP.Secondary.Automatic   = true
+SWEP.Secondary.Ammo        = "none"
 
-SWEP.Target = SWEP.Target or NULL;
-SWEP.Missile = SWEP.Missile or NULL;
-SWEP.TempTarget = NULL;
-SWEP.LockTime = CurTime();
-SWEP.LockCount = 0;
-SWEP.DidExplosion = false
-SWEP.CanFireMissile = true;
-SWEP.LastTarget = NULL;
+SWEP.Target        = SWEP.Target or NULL
+SWEP.Missile       = SWEP.Missile or NULL
+SWEP.TempTarget    = NULL
+SWEP.LockTime      = 0
+SWEP.LockCount     = 0
+SWEP.DidExplosion  = false
+SWEP.CanFireMissile = true
+SWEP.LastTarget    = NULL
+
 
 function SWEP:Initialize()
-	self.Owner:SetNetworkedBool("TargetLock", false)
+	-- FIX: SetNetworkedBool removed in modern GMod -> SetNWBool
+	self.Owner:SetNWBool( "TargetLock", false )
 end
 
+
 function SWEP:Think()
-	if !( SERVER ) then	return end
-	
-	if self.Owner:KeyDown(IN_ATTACK2) && self.Missile == NULL && self.Target == NULL then	
-		local trace = self.Owner:GetEyeTrace()		
-		if self.Target == NULL && trace.Hit && trace.Entity:IsValid() && !trace.Entity:IsPlayer() then
+	-- FIX: !(SERVER) pattern normalized; CLIENT guard is cleaner
+	if CLIENT then return end
+
+	if self.Owner:KeyDown( IN_ATTACK2 ) and self.Missile == NULL and self.Target == NULL then
+		local trace = self.Owner:GetEyeTrace()
+		if self.Target == NULL and trace.Hit and IsValid( trace.Entity ) and not trace.Entity:IsPlayer() then
 			if self.LockTime < CurTime() then
-				self.LockTime = CurTime() + 1
-				self.LockCount = self.LockCount + 1			
-				self.Owner:ChatPrint("Lock " .. self.LockCount)
+				self.LockTime  = CurTime() + 1
+				self.LockCount = self.LockCount + 1
+				self.Owner:ChatPrint( "Lock " .. self.LockCount )
 				if self.LockCount >= 2 then
-					self.Target = trace.Entity;
-					self.Owner:SetNetworkedBool("TargetLock", true)
-					self.Owner:ChatPrint("Ready to fire")
+					self.Target = trace.Entity
+					-- FIX: SetNetworkedBool -> SetNWBool
+					self.Owner:SetNWBool( "TargetLock", true )
+					self.Owner:ChatPrint( "Ready to fire" )
 				end
 			end
 		else
-			self.LockCount = 0;
+			self.LockCount = 0
 		end
-	elseif self.Owner:KeyDown(IN_ATTACK) && IsValid(self.Target) then
+	elseif self.Owner:KeyDown( IN_ATTACK ) and IsValid( self.Target ) then
 		self:FireMissile()
-		self:TakePrimaryAmmo(1)		
+		self:TakePrimaryAmmo( 1 )
 	end
-	
-	if( self.Owner:KeyReleased( IN_ATTACK2  ) ) then
-		self.LockCount = 0;
+
+	if self.Owner:KeyReleased( IN_ATTACK2 ) then
+		self.LockCount = 0
 	end
 end
 
-function SWEP:DrawHUD()	
-	if !self.Owner:GetNetworkedBool("TargetLock") then 
-		trace = self.Owner:GetEyeTrace()
-		if trace.Hit && !trace.Entity:IsNPC() && !trace.Entity:IsPlayer() && trace.Entity:IsValid() then
+
+function SWEP:DrawHUD()
+	-- FIX: GetNetworkedBool -> GetNWBool; `trace` was an undeclared global, now local
+	if not self.Owner:GetNWBool( "TargetLock" ) then
+		local trace = self.Owner:GetEyeTrace()
+		if trace.Hit and not trace.Entity:IsNPC() and not trace.Entity:IsPlayer() and IsValid( trace.Entity ) then
 			self.LastTarget = trace.Entity
-			self.TempTarget = trace.Entity;
-			self.TempTarget:SetColor(Color(255, 0, 0, 255))
-		elseif (self.TempTarget != NULL && self.TempTarget:IsValid() && !trace.Entity:IsValid()) && trace.Entity != self.TempTarget then
-			self.TempTarget:SetColor(Color(255, 255, 255, 255))
-			self.TempTarget = NULL;
-		end
-	
-	end
-	if self.Owner:GetNetworkedBool("TargetLock") then 
-		if self.Target:IsValid() then
-			self.TempTarget:SetColor(Color(255, 255, 255, 255))
-			self.TempTarget = NULL;
-			self.Target:SetColor(Color(0, 255, 0, 255))
+			self.TempTarget = trace.Entity
+			self.TempTarget:SetColor( Color( 255, 0, 0, 255 ) )
+		elseif self.TempTarget != NULL and IsValid( self.TempTarget ) and not IsValid( trace.Entity ) and trace.Entity != self.TempTarget then
+			self.TempTarget:SetColor( Color( 255, 255, 255, 255 ) )
+			self.TempTarget = NULL
 		end
 	end
-	
-	if self.LastTarget != NULL && self.LastTarget:IsValid() then
-		self.LastTarget:SetColor(Color(255, 255, 255, 255))
-	end	
+
+	if self.Owner:GetNWBool( "TargetLock" ) then
+		if IsValid( self.Target ) then
+			if IsValid( self.TempTarget ) then
+				self.TempTarget:SetColor( Color( 255, 255, 255, 255 ) )
+			end
+			self.TempTarget = NULL
+			self.Target:SetColor( Color( 0, 255, 0, 255 ) )
+		end
+	end
+
+	if self.LastTarget != NULL and IsValid( self.LastTarget ) then
+		self.LastTarget:SetColor( Color( 255, 255, 255, 255 ) )
+	end
 end
+
 
 function SWEP:FireMissile()
-	self.Missile = ents.Create("stinger_missile");
-	self.Missile:SetPos(self.Owner:GetShootPos() + self.Owner:GetUp() * 15)
-	self.Missile:SetOwner(self.Owner)
-	self.Missile:SetVar("target",self.Target);
-	
-	self.Missile:Spawn();
-	self.Missile:Activate();
-	
-	self.Weapon:SendWeaponAnim(ACT_VM_PRIMARYATTACK)
-	self.Owner:SetAnimation(PLAYER_ATTACK1)
-	
-	self.LastTarget = self.Target;
-	self.Target = NULL;
-	self.Owner:SetNetworkedBool("TargetLock", false)
+	if CLIENT then return end
+	local missile = ents.Create( "stinger_missile" )
+	missile:SetPos( self.Owner:GetShootPos() + self.Owner:GetUp() * 15 )
+	missile:SetOwner( self.Owner )
+	-- FIX: SetVar() is removed datastream API. Assign Target directly on
+	-- the entity table so stinger_missile/init.lua can read missile.Target.
+	missile.Owner  = self.Owner
+	missile.Target = self.Target
+	missile:Spawn()
+	missile:Activate()
+
+	self.Missile = missile
+	self.Weapon:SendWeaponAnim( ACT_VM_PRIMARYATTACK )
+	self.Owner:SetAnimation( PLAYER_ATTACK1 )
+
+	self.LastTarget = self.Target
+	self.Target     = NULL
+	-- FIX: SetNetworkedBool -> SetNWBool
+	self.Owner:SetNWBool( "TargetLock", false )
 end
 
+
 function SWEP:Holster()
-	self.TargetLock = false;
-	self.TempTarget = NULL;
-	self.LockCount = 0;
-	return true;
+	self.TargetLock = false
+	self.TempTarget = NULL
+	self.LockCount  = 0
+	return true
 end
 
 function SWEP:PrimaryAttack()
@@ -150,5 +155,5 @@ function SWEP:SecondaryAttack()
 end
 
 function SWEP:Reload()
-	self.Weapon:DefaultReload(ACT_VM_RELOAD)
+	self.Weapon:DefaultReload( ACT_VM_RELOAD )
 end
