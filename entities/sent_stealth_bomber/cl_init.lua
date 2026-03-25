@@ -1,47 +1,18 @@
-include( "shared.lua" )		//  REQUIRED TO PREVENT ERRORS AND INVISIBLE ENTITIES
+include( "shared.lua" )
 
 
-function BOMBER_FRIENDLY()	//	CREATE A FUNCTION CALLED:	BOMBER_FRIENDLY()
-	
-	
-	
-	playBomberInboundSound()	//	CALL (RUN) FUNCTION CALLED:  playBomberInboundSound
-	
-	
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
+local function BOMBER_FRIENDLY()
+	-- FIX: GetNetworkedString -> GetNWString
+	surface.PlaySound( "killstreak_rewards/precision_airstrike_friendly_inbound" .. LocalPlayer():GetNWString( "MW2TeamSound", "" ) .. ".wav" )
+end
 
 
-function BOMBER_ENEMY()	//	CREATE A FUNCTION CALLED:	BOMBER_ENEMY()
+local function BOMBER_ENEMY()
+	-- FIX: GetNetworkedString -> GetNWString
+	surface.PlaySound( "killstreak_rewards/precision_airstrike_enemy_inbound" .. LocalPlayer():GetNWString( "MW2TeamSound", "" ) .. ".wav" )
+end
 
 
-	
-	playBomberDeploySound()	//	CALL (RUN) FUNCTION CALLED:  playBomberDeploySound
-	
-	
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-function playBomberInboundSound()	//	CREATE A FUNCTION CALLED:	playBomberInboundSound()
-
-
-	surface.PlaySound("killstreak_rewards/precision_airstrike_" .. /*teamType*/"friendly" .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".wav")	//  PLAY THE APPROPRIATE SOUND IN RELATION TO THE USER'S CHOSEN TEAM
-
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-function playBomberDeploySound()	//	CREATE A FUNCTION CALLED:	playBomberDeploySound()
-	
-	
-	surface.PlaySound("killstreak_rewards/precision_airstrike_" .. /*teamType*/"enemy" .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".wav")	//  PLAY THE APPROPRIATE SOUND IN RELATION TO THE USER'S CHOSEN TEAM
-
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-usermessage.Hook( "MW2_BOMBER_FRIENDLY", BOMBER_FRIENDLY )	//	IF THE SYSTEM DETECTS THAT A MESSAGE HAS BEEN SENT TO THE USER *AND* THAT MESSAGE IS SPECIFICALLY:	"MW2_BOMBER_FRIENDLY"  -  RUN THE FUNCTION:	BOMBER_FRIENDLY()
-
-
-usermessage.Hook( "MW2_BOMBER_ENEMY", BOMBER_ENEMY )	//	IF THE SYSTEM DETECTS THAT A MESSAGE HAS BEEN SENT TO THE USER *AND* THAT MESSAGE IS SPECIFICALLY:	"MW2_BOMBER_ENEMY"  -  RUN THE FUNCTION:	BOMBER_ENEMY()
+-- FIX: usermessage.Hook x2 -> net.Receive
+net.Receive( "MW2_BOMBER_FRIENDLY", BOMBER_FRIENDLY )
+net.Receive( "MW2_BOMBER_ENEMY",   BOMBER_ENEMY )

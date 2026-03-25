@@ -1,47 +1,18 @@
-include( 'shared.lua' )  //  REQUIRED TO PREVENT ERRORS AND INVISIBLE ENTITIES
+include( 'shared.lua' )
 
 
-function HARRIER_FRIENDLY()	//	CREATE A FUNCTION CALLED:	HARRIER_FRIENDLY()
-	
-	
-	
-	playHarrierInboundSound()	//	CALL (RUN) FUNCTION CALLED:  playHarrierInboundSound
-	
-	
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
+local function HARRIER_FRIENDLY()
+	-- FIX: GetNetworkedString -> GetNWString
+	surface.PlaySound( "killstreak_rewards/harrier_friendly_inbound" .. LocalPlayer():GetNWString( "MW2TeamSound", "" ) .. ".wav" )
+end
 
 
-function HARRIER_ENEMY()	//	CREATE A FUNCTION CALLED:	HARRIER_ENEMY()
+local function HARRIER_ENEMY()
+	-- FIX: GetNetworkedString -> GetNWString
+	surface.PlaySound( "killstreak_rewards/harrier_enemy_inbound" .. LocalPlayer():GetNWString( "MW2TeamSound", "" ) .. ".wav" )
+end
 
 
-	
-	playHarrierDeploySound()	//	CALL (RUN) FUNCTION CALLED:  playHarrierDeploySound
-	
-	
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-function playHarrierInboundSound()  //	CREATE A FUNCTION CALLED:	playHarrierInboundSound()
-	
-
-	surface.PlaySound("killstreak_rewards/harrier_" .. /*teamType*/"friendly" .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".wav")	//  PLAY THE APPROPRIATE SOUND IN RELATION TO THE USER'S CHOSEN TEAM
-
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-function playHarrierDeploySound()  //	CREATE A FUNCTION CALLED:	playHarrierDeploySound()
-	
-
-	surface.PlaySound("killstreak_rewards/harrier_" .. /*teamType*/"enemy" .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".wav")	//  PLAY THE APPROPRIATE SOUND IN RELATION TO THE USER'S CHOSEN TEAM
-
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-usermessage.Hook( "MW2_HARRIER_FRIENDLY", HARRIER_FRIENDLY )	//	IF THE SYSTEM DETECTS THAT A MESSAGE HAS BEEN SENT TO THE USER *AND* THAT MESSAGE IS SPECIFICALLY:	"MW2_HARRIER_FRIENDLY"  -  RUN THE FUNCTION:	HARRIER_FRIENDLY()
-
-
-usermessage.Hook( "MW2_HARRIER_ENEMY", HARRIER_ENEMY )	//	IF THE SYSTEM DETECTS THAT A MESSAGE HAS BEEN SENT TO THE USER *AND* THAT MESSAGE IS SPECIFICALLY:	"MW2_HARRIER_ENEMY"  -  RUN THE FUNCTION:	HARRIER_ENEMY()
+-- FIX: usermessage.Hook x2 -> net.Receive
+net.Receive( "MW2_HARRIER_FRIENDLY", HARRIER_FRIENDLY )
+net.Receive( "MW2_HARRIER_ENEMY",   HARRIER_ENEMY )

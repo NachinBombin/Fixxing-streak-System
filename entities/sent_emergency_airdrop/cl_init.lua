@@ -1,24 +1,11 @@
-include( "shared.lua" )		//  REQUIRED TO PREVENT ERRORS AND INVISIBLE ENTITIES
+include( "shared.lua" )
 
 
-function AIRDROP_FRIENDLY()	//	CREATE A FUNCTION CALLED:	AIRDROP_FRIENDLY()
-	
-	
-	
-	playAirdropInboundSound()	//	CALL (RUN) FUNCTION CALLED:  playAirdropInboundSound
-	
-	
-
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
+local function AIRDROP_FRIENDLY()
+	-- FIX: GetNetworkedString -> GetNWString
+	surface.PlaySound( "killstreak_rewards/emergency_airdrop_inbound" .. LocalPlayer():GetNWString( "MW2TeamSound", "" ) .. ".wav" )
+end
 
 
-function playAirdropInboundSound()	//	CREATE A FUNCTION CALLED:	playAirdropInboundSound()
-
-
-	surface.PlaySound("killstreak_rewards/emergency_airdrop" .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".wav")	//  PLAY THE APPROPRIATE SOUND IN RELATION TO THE USER'S CHOSEN TEAM
-
-	
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
-
-
-usermessage.Hook( "MW2_AIRDROP_FRIENDLY", AIRDROP_FRIENDLY )	//	IF THE SYSTEM DETECTS THAT A MESSAGE HAS BEEN SENT TO THE USER *AND* THAT MESSAGE IS SPECIFICALLY:	"MW2_AIRDROP_FRIENDLY"  -  RUN THE FUNCTION:	AIRDROP_FRIENDLY()
+-- FIX: usermessage.Hook x1 -> net.Receive
+net.Receive( "MW2_AIRDROP_FRIENDLY", AIRDROP_FRIENDLY )
