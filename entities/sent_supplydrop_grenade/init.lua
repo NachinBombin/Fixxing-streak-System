@@ -5,7 +5,6 @@ ENT.SpawnEffectsOnce = false
 ENT.Smoke            = nil
 
 function ENT:Initialize()
-	-- FIX: self.Owner = self:GetVar('owner') dead API -> removed (set by parent)
 	self:SetModel( "models/Items/grenadeAmmo.mdl" )
 	self:PhysicsInit( SOLID_VPHYSICS )
 	self:SetMoveType( MOVETYPE_VPHYSICS )
@@ -31,7 +30,6 @@ function ENT:PhysicsCollide( data, physobj )
 		self.Smoke:Activate()
 		self.Smoke:Fire( "kill", "", 12 )
 
-		-- FIX: self:GetVar('DropType') dead API -> self.DropType or GetNWString
 		local dropType = self.DropType or self:GetNWString( "DropType", "sent_CarePackage" )
 		if dropType == "sent_CarePackage" then
 			self:PlaySound( "care_package" )
@@ -41,8 +39,8 @@ function ENT:PhysicsCollide( data, physobj )
 			self:PlaySound( "emergency_airdrop" )
 		end
 
-		timer.Simple( 2,  function() self:StartDrop() end )
-		timer.Simple( 12, function() if IsValid( self ) then self:Remove() end end )
+		timer.Simple( 2,  function() if IsValid( self ) then self:StartDrop() end end )
+		timer.Simple( 12, function() if IsValid( self ) then self:Remove()    end end )
 	end
 	if IsValid( self.Smoke ) then
 		self.Smoke:SetPos( self:GetPos() )
@@ -51,24 +49,24 @@ end
 
 
 function ENT:StartDrop()
-	-- FIX: self:GetVar('DropType') dead API -> self.DropType or GetNWString
 	self.DropType = self.DropType or self:GetNWString( "DropType", "sent_CarePackage" )
 	local ent
 	if self.DropType == "Sentry_Gun" then
 		ent = ents.Create( "sent_CarePackage" )
-		-- FIX: ent:SetVar('IsSentry') dead API -> SetNWBool
 		ent:SetNWBool( "IsSentry", true )
 	else
 		ent = ents.Create( self.DropType )
 	end
-	-- FIX: ent:SetVar('owner'/'PackageDropZone') dead API -> direct assign + SetNWVector
-	ent.Owner = self.Owner
-	ent:SetNWVector( "PackageDropZone", self:GetPos() )
+	-- FIX: was setting ent:SetNWVector('PackageDropZone') AFTER Spawn,
+	-- but sent_carepackage/Initialize reads self.dropPos synchronously.
+	-- Set as direct field BEFORE Spawn so it is available immediately.
+	ent.Owner   = self.Owner
+	ent.dropPos = self:GetPos()
 	ent:Spawn()
 	ent:Activate()
 end
 
 
 function ENT:PlaySound( soundName )
-	-- umsg block was already disabled in original, left as no-op
+	-- no-op: sounds handled client-side
 end
