@@ -34,7 +34,6 @@ function ENT:FindSky()
 		else
 			table.insert( filterList, traceData.Entity )
 		end
-		-- FIX: maxNumber now increments every iteration; was missing, causing potential infinite loop
 		maxNumber = maxNumber + 1
 		if maxNumber >= 300 then
 			MsgN( "[MW2 Killstreaks] FindSky: reached max iterations, no skybox found" )
@@ -53,9 +52,9 @@ function ENT:findGround()
 	local filterList = { self.Owner, self }
 	local trace = { start = startPos, endpos = endPos, filter = filterList }
 
-	local bool            = true
-	local maxNumber       = 0
-	local groundLocation  = -1
+	local bool           = true
+	local maxNumber      = 0
+	local groundLocation = -1
 
 	while bool do
 		local traceData = util.TraceLine( trace )
@@ -132,15 +131,17 @@ end
 
 
 function ENT:Initialize()
-	self.Owner = self:GetVar( "owner", nil )
+	self.Owner = self.Owner or nil  -- set by weapon base SWEP:Run() as ent.Owner
 
-	if self.Owner == nil then
+	-- FIX: added IsValid guard - if owner is nil/invalid, remove cleanly
+	-- instead of crashing at GetWalkSpeed on a nil value
+	if not IsValid( self.Owner ) then
 		self:Remove()
-		MsgN( "[MW2 Killstreaks] Entity spawned without owner - removed." )
+		MsgN( "[MW2 Killstreaks] Entity spawned without valid owner - removed." )
 		return
 	end
 
-	self.Wep = self:GetVar( "Weapon", nil )
+	self.Wep = self.Wep or nil
 	self.Sky = self:FindSky()
 	self:SetModel( self.Model )
 
@@ -153,13 +154,12 @@ function ENT:Initialize()
 		self.PhysObj:Wake()
 	end
 
-	self.PhysgunDisabled    = true
-	self.m_tblToolsAllowed  = string.Explode( " ", "none" )
+	self.PhysgunDisabled   = true
+	self.m_tblToolsAllowed = string.Explode( " ", "none" )
 
 	self.playerSpeeds = { self.Owner:GetWalkSpeed(), self.Owner:GetRunSpeed() }
 
 	if self.restrictMovement then
-		-- FIX: GAMEMODE:SetPlayerSpeed is DarkRP-only. Use direct calls for sandbox compatibility.
 		self.Owner:SetWalkSpeed( 1 )
 		self.Owner:SetRunSpeed( 1 )
 	else
@@ -190,7 +190,6 @@ function ENT:FilterTarget( target, LOS )
 		haslos = self:HasLOS( target )
 	end
 
-	-- FIX: GetConVarNumber is deprecated; use GetConVar():GetInt()
 	if IsValid( target ) and haslos then
 		if target:IsNPC() then
 			if not table.HasValue( self.Friendlys, target:GetClass() ) then
@@ -229,8 +228,6 @@ local function SpawnFlares( self, fpos )
 		local Phys = flares:GetPhysicsObject()
 		if Phys:IsValid() then
 			Phys:Wake()
-			-- FIX: math.random(5-40, 40) evaluated to math.random(-35, 40).
-			-- Intent was symmetric -40..40 scatter. Fixed all three axes.
 			Phys:ApplyForceCenter( Vector(
 				math.random( -40, 40 ),
 				math.random( -40, 40 ),
@@ -312,5 +309,3 @@ local function SetLocation( size, pl )
 end
 
 net.Receive( "MW2_DropLocation_Overlay_Stream", SetLocation )
--- FIX: Removed dead hook.Add("MW2_DropLoc_Overlay_UM", ...) - MW2_DropLoc_Overlay_UM is a
--- net message name, not a GMod hook. hook.Add on it was a no-op. net.Receive above handles it.

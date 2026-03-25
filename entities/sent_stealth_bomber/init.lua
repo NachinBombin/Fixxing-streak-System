@@ -1,252 +1,172 @@
-include( 'shared.lua' )
-
-
+include( "shared.lua" )
 AddCSLuaFile( "shared.lua" )
+AddCSLuaFile( "cl_init.lua" )
+
+-- FIX: net strings for REQUEST_BOMBER (replaced dead umsg)
+if SERVER then
+	util.AddNetworkString( "MW2_BOMBER_FRIENDLY" )
+	util.AddNetworkString( "MW2_BOMBER_ENEMY" )
+end
+
+ENT.Model            = Model( "models/dav0r/camera.mdl" )
+ENT.restrictMovement = true
+ENT.Bomber           = nil
+ENT.WallLoc          = NULL
+ENT.playOnce         = true
+ENT.findHoverZone    = true
+-- FIX: these were set to CurTime() at file-scope (table-def time), not spawn time.
+-- Moved to MW2_Init() so they reflect actual spawn time.
+ENT.DropDelay        = 0
+ENT.InitialDelay     = 0
 
 
-AddCSLuaFile( "cl_init.lua" )	//	MARK CUSTOM CLIENT FILE AS IMPORTANT AND SEND IT TO OTHER PLAYERS
-
-
-ENT.Model = Model( "models/dav0r/camera.mdl" )
-ENT.DropDelay = CurTime();
-ENT.playOnce = true;
-ENT.findHoverZone = true
-ENT.WallLoc = NULL;
-ENT.Bomber = nil
-ENT.InitialDelay = CurTime();
-ENT.restrictMovement = true;
-
-
-local function Check_Status( Owner )	//  CREATE LOCAL FUNCTION CALLED:  "Check_Status"  -  ACCEPT ONE PARAMETER
-
-
-	if Owner:Alive() == true then	//  CHECK:	IF THE OWNER OF THE STEALTH-BOMBER *IS ALIVE*, THEN...
-	
-	
-		return 1	//  RETURN A VALUE OF "1"
-	
-	
-	else	//  IF THE OWNER OF THE STEALTH-BOMBER IS *NOT ALIVE*, THEN...
-	
-	
-		return 0	//  RETURN A VALUE OF "0"
-	
-
-	end  //  FINISH THE CHECK
-
-
-end  //  COMPLETE THE FUNCTION
+local function Check_Status( Owner )
+	-- FIX: Owner can be nil/invalid if base Initialize() failed; guard it
+	if not IsValid( Owner ) then return 0 end
+	return Owner:Alive() and 1 or 0
+end
 
 
 function ENT:Think()
 	self:NextThink( CurTime() + 0.1 )
-	if IsValid(self.Bomber) && !self.Bomber:IsInWorld() then
+
+	if IsValid( self.Bomber ) and not self.Bomber:IsInWorld() then
 		self.Bomber:Remove()
 		self:Remove()
-		return true;
+		return true
 	end
 
+	local Status = Check_Status( self.Owner )
 
-	local Status = Check_Status( self.Owner )	//  CREATE A LOCAL VARIABLE CALLED: 	"Status"	-	STORE THE VALUE RETURNED BY THE FUNCTION "Check_Status" ( PASS THE OWNER OF THE STEALTH-BOMBER TO THE FUNCTION )
+	if Status == 1 then
+		if self.DropLoc == nil or self.DropAng == nil then return end
 
+		if self.findHoverZone then
+			self.findHoverZone = false
+			self.WallLoc = self:FindWall()
+			self.FlyAng  = self.DropAng
 
-	if Status == 1 then  //  CHECK:  IF THE FUNCTION "Check_Status" RETURNED A VALUE OF "1" ( THE OWNER OF THE STEALTH-BOMBER IS STILL ALIVE ), THEN...
+			-- FIX: GAMEMODE:SetPlayerSpeed is DarkRP-only; use direct calls
+			if IsValid( self.Owner ) then
+				self.Owner:SetWalkSpeed( self.playerSpeeds[1] )
+				self.Owner:SetRunSpeed( self.playerSpeeds[2] )
+			end
 
-
-	if self.DropLoc == nil || self.DropAng == nil then return end
-
-	if self.findHoverZone then
-		self.findHoverZone = false;
-		
-		self.WallLoc = self:FindWall();
-		self.FlyAng = self.DropAng
-		
-		GAMEMODE:SetPlayerSpeed(self.Owner, self.playerSpeeds[1], self.playerSpeeds[2])
-		if IsValid(self.Wep) then
-			
-			self.Wep:CallIn();
-			
-			self:REQUEST_BOMBER()	//	IF THE DROP ZONE THAT THE USER SELECTS IS VALID, RUN CUSTOM FUNCTION EXPLAINED BELOW
-			
+			if IsValid( self.Wep ) then
+				self.Wep:CallIn()
+				self:REQUEST_BOMBER()
+			end
+			self:SpawnBomber()
+		else
+			if not self.Bomber then self:Remove() return end
+			self.Bomber.PhysObj:SetVelocity( self.Bomber:GetForward() * 5000 )
+			if self.DropDelay < CurTime() and self.InitialDelay < CurTime() then
+				self.DropDelay = CurTime() + .08
+				self:SpawnBomb()
+			end
 		end
-		self:SpawnBomber();		
+
+		if not self.findHoverZone and self.playOnce then
+			if IsValid( self.Wep ) then self.Wep:PlaySound() end
+			self.playOnce = false
+		end
 	else
-		if not self.Bomber then self:Remove() return end
-		self.Bomber.PhysObj:SetVelocity(self.Bomber:GetForward()*5000)
-		if self.DropDelay < CurTime() && self.InitialDelay < CurTime() then
-			self.DropDelay = CurTime() + .08;
-			self:SpawnBomb();
-		end
+		self:Remove()
 	end
-	
-	if !self.findHoverZone && self.playOnce then
-		self.Wep:PlaySound();
-		self.playOnce = false;
-	end
-	
-	
-	elseif Status != 1 then  //  IF THE FUNCTION "Check_Status" RETURNED A VALUE THAT IS *NOT EQUAL* TO "1" ( THE OWNER OF THE STEALTH-BOMBER IS NOT ALIVE ), THEN...
-	
-	
-		self:Remove()  //  REMOVE THE STEALTH-BOMBER
-		
-		
-	end  //  FINISH THE CHECK
-	
-	
-	return true;
-	
-	
+
+	return true
 end
+
 
 function ENT:MW2_Init()
-	self.Entity:SetModel( "models/dav0r/camera.mdl" )
-	self.Entity:SetColor(Color(255,255,255,0))
-	self:SetPos(Vector(0,0, 0));
-	
-	self.PhysObj:EnableGravity(false)
-	self.Entity:SetNotSolid(true);
-	
-	
-	self.Owner = self:GetVar("owner")
-	
-	
-	self:OpenOverlayMap(true);
-	
-	
+	-- FIX: use self directly, not self.Entity (removed old pattern)
+	self:SetModel( "models/dav0r/camera.mdl" )
+	self:SetColor( Color( 255, 255, 255, 0 ) )
+	self:SetPos( Vector( 0, 0, 0 ) )
+	self.PhysObj:EnableGravity( false )
+	self:SetNotSolid( true )
+	-- FIX: self.Owner is already set by base ENT:Initialize(); GetVar removed.
+	-- FIX: init timestamps set here at actual spawn time
+	self.DropDelay    = CurTime()
+	self.InitialDelay = CurTime()
+	self:OpenOverlayMap( true )
 end
 
 
-function ENT:REQUEST_BOMBER()	//	CREATE A GLOBAL FUNCTION CALLED:	"REQUEST_BOMBER"
-	
+function ENT:REQUEST_BOMBER()
+	-- FIX: umsg.Start/End removed from GMod ~2013. Replaced with net library.
+	local Players = player.GetHumans()
+	local teamsOn = GetConVar( "MW2_TEAMS_ENABLED" ):GetInt() != 0
 
-	local Players = player.GetHumans()	//	CREATE A LOCAL VARIABLE CALLED:  "Players"	-	STORE ALL PLAYERS FOUND ACROSS THE SERVER
-	
-	
-	if GetConVar( "MW2_TEAMS_ENABLED" ):GetInt() != 0 then	//	CHECK:	IF TEAMS *ARE ENABLED*, THEN...
-	
-	
-		for Key, Value in pairs( Players ) do		//	CREATE A LOOP IN ORDER TO ITERATE THROUGH EACH PLAYER FOUND  -  FOR EACH PLAYER FOUND, DO THE FOLLOWING...
-	
-	
-			if Value:Team() == self.Owner:Team() then	//	IF THE CURRENT PLAYER BEING LOOKED AT IS ON THE *SAME TEAM* AS THE OWNER OF THE STEALTH-BOMBER, THEN...
-			
-			
-				umsg.Start( "MW2_BOMBER_FRIENDLY", Value );  //  CREATE A MESSAGE (EVENT) CALLED:	"MW2_BOMBER_FRIENDLY"	-	SEND TO THE PLAYER CURRENTLY BEING PROCESSED
-			
-			
-				umsg.End();  //  TELL THE SYSTEM THAT ALL MESSAGES HAVE BEEN DEFINED
+	for _, Value in pairs( Players ) do
+		local isFriendly
+		if teamsOn then
+			isFriendly = Value:Team() == self.Owner:Team()
+		else
+			isFriendly = Value == self.Owner
+		end
 
-		
-			elseif Value:Team() != self.Owner:Team() then	//	IF THE CURRENT PLAYER BEING LOOKED AT IS *NOT* ON THE SAME TEAM AS THE OWNER OF THE STEALTH-BOMBER, THEN...
-		
-
-				umsg.Start( "MW2_BOMBER_ENEMY", Value );  //  CREATE A MESSAGE (EVENT) CALLED:	"MW2_BOMBER_ENEMY"	-	SEND TO THE PLAYER CURRENTLY BEING PROCESSED
-			
-			
-				umsg.End();  //  TELL THE SYSTEM THAT ALL MESSAGES HAVE BEEN DEFINED
-			
-	    
-			else	//	IF BOTH CONDITIONS FAIL, PRINT AN ERROR MESSAGE
-		
-			
-				print( "[ BOMBER BROADCAST FAILED ] - TRIED TO SEND MESSAGE TO: ", Value )		//	PRINT ERROR MESSAGE TO SERVER CONSOLE
-		
-		
-			end  //  FINISH THE "IF" STATEMENT
-	
-	
-		end  //  FINISH LOOPING
-		
-		
-	else	//	IF TEAMS ARE *NOT ENABLED*, THEN...
-	
-	
-		for Key, Value in pairs( Players ) do		//	CREATE A LOOP IN ORDER TO ITERATE THROUGH EACH PLAYER FOUND  -  FOR EACH PLAYER FOUND, DO THE FOLLOWING...
-	
-	
-			if Value == self.Owner then  //  IF THE PLAYER CURRENTLY BEING LOOKED AT *IS THE OWNER* OF THE STEALTH-BOMBER, THEN...
-			
-			
-				umsg.Start( "MW2_BOMBER_FRIENDLY", Value );  //  CREATE A MESSAGE (EVENT) CALLED:	"MW2_BOMBER_FRIENDLY"	-	SEND TO THE PLAYER CURRENTLY BEING PROCESSED
-			
-			
-				umsg.End();  //  TELL THE SYSTEM THAT ALL MESSAGES HAVE BEEN DEFINED
-				
-				
-			elseif Value != self.Owner then		//	IF THE PLAYER CURRENTLY BEING LOOKED AT IS *NOT THE OWNER* OF THE STEALTH-BOMBER, THEN...
-	
-	
-				umsg.Start( "MW2_BOMBER_ENEMY", Value );  //  CREATE A MESSAGE (EVENT) CALLED:	"MW2_BOMBER_ENEMY"	-	SEND TO THE PLAYER CURRENTLY BEING PROCESSED
-			
-			
-				umsg.End();  //  TELL THE SYSTEM THAT ALL MESSAGES HAVE BEEN DEFINED
-				
-				
-			else	//	IF BOTH CONDITIONS FAIL, PRINT AN ERROR MESSAGE
-		
-			
-				print( "[ BOMBER BROADCAST FAILED ] - TRIED TO SEND MESSAGE TO: ", Value )		//	PRINT ERROR MESSAGE TO SERVER CONSOLE
-		
-		
-			end  //  FINISH THE "IF" STATEMENT
-			
-			
-		end  //  FINISH THE LOOP
-		
-		
-	end  //  FINISH THE CHECK
-
-
-end  //  TELL THE SYSTEM THAT THE FUNCTION HAS BEEN FULLY DEFINED
+		if isFriendly then
+			net.Start( "MW2_BOMBER_FRIENDLY" )
+			net.Send( Value )
+		else
+			net.Start( "MW2_BOMBER_ENEMY" )
+			net.Send( Value )
+		end
+	end
+end
 
 
 function ENT:SpawnBomber()
-	self.ground = self:findGround() + 4000;
-	self.Bomber = ents.Create("prop_physics")
-	self.Bomber:SetModel("models/military2/air/air_f117_l.mdl")
-	self.Bomber:SetColor(Color(255,255,255,255))
-	self.Bomber:SetPos( Vector( self.WallLoc.x, self.WallLoc.y, self.ground) )
+	self.ground = self:findGround() + 4000
+	self.Bomber = ents.Create( "prop_physics" )
+	self.Bomber:SetModel( "models/military2/air/air_f117_l.mdl" )
+	self.Bomber:SetColor( Color( 255, 255, 255, 255 ) )
+	self.Bomber:SetPos( Vector( self.WallLoc.x, self.WallLoc.y, self.ground ) )
 	self.Bomber:SetAngles( self.FlyAng )
-	
 	self.Bomber:PhysicsInit( SOLID_VPHYSICS )
-	self.Bomber:SetMoveType( MOVETYPE_VPHYSICS )		
+	self.Bomber:SetMoveType( MOVETYPE_VPHYSICS )
 	self.Bomber:SetSolid( SOLID_VPHYSICS )
-
 	self.Bomber.PhysObj = self.Bomber:GetPhysicsObject()
-	if (self.Bomber.PhysObj:IsValid()) then
+	if self.Bomber.PhysObj:IsValid() then
 		self.Bomber.PhysObj:Wake()
 	end
-	self.InitialDelay = CurTime() + .6;
-	
-	constraint.NoCollide( self.Bomber, game.GetWorld(), 0, 0 );	
+	self.InitialDelay        = CurTime() + .6
+	constraint.NoCollide( self.Bomber, game.GetWorld(), 0, 0 )
 	self.Bomber.PhysgunDisabled = true
 end
 
+
 function ENT:SpawnBomb()
-	local bomb = ents.Create( "sent_air_strike_bomb" );
-	bomb:SetPos(self.Bomber:GetPos() + (self.Bomber:GetRight() * -50) )
-	bomb:SetAngles(self.Bomber:GetAngles());
-	bomb:SetVar("owner",self.Owner)
-	bomb:SetVar("FromCarePackage", self:GetVar("FromCarePackage",false))
-	bomb:Spawn();
-	constraint.NoCollide( self.Bomber, bomb, 0, 0 );	
-	bomb:SetVar("HasBeenDropped",true);
-	
-	local bomb2 = ents.Create( "sent_air_strike_bomb" );
-	bomb2:SetPos(self.Bomber:GetPos() + (self.Bomber:GetRight() * 50) )
-	bomb2:SetAngles(self.Bomber:GetAngles());
-	bomb2:SetVar("owner",self.Owner)
-	bomb2:SetVar("FromCarePackage", self:GetVar("FromCarePackage",false))
-	bomb2:Spawn();
-	constraint.NoCollide( self.Bomber, bomb2, 0, 0 );
-	bomb2:SetVar("HasBeenDropped",true);		
+	local careFlag = self:GetNWBool( "FromCarePackage", false )
+
+	-- FIX: SetVar/GetVar are removed datastream API. Assign directly on entity table.
+	local bomb = ents.Create( "sent_air_strike_bomb" )
+	bomb:SetPos( self.Bomber:GetPos() + self.Bomber:GetRight() * -50 )
+	bomb:SetAngles( self.Bomber:GetAngles() )
+	bomb.Owner           = self.Owner
+	bomb.FromCarePackage = careFlag
+	bomb.HasBeenDropped  = true
+	bomb:Spawn()
+	constraint.NoCollide( self.Bomber, bomb, 0, 0 )
+
+	local bomb2 = ents.Create( "sent_air_strike_bomb" )
+	bomb2:SetPos( self.Bomber:GetPos() + self.Bomber:GetRight() * 50 )
+	bomb2:SetAngles( self.Bomber:GetAngles() )
+	bomb2.Owner           = self.Owner
+	bomb2.FromCarePackage = careFlag
+	bomb2.HasBeenDropped  = true
+	bomb2:Spawn()
+	constraint.NoCollide( self.Bomber, bomb2, 0, 0 )
 end
+
 
 function ENT:OnTakeDamage( dmginfo )
-	self.Entity:TakePhysicsDamage( dmginfo )	
+	-- FIX: was self.Entity:TakePhysicsDamage -> use self directly
+	self:TakePhysicsDamage( dmginfo )
 end
 
+
 function ENT:FindWall()
-	return util.QuickTrace( self.DropLoc, self.DropAng:Forward() * -100000, self).HitPos
+	return util.QuickTrace( self.DropLoc, self.DropAng:Forward() * -100000, self ).HitPos
 end
