@@ -1,238 +1,173 @@
 AddCSLuaFile( "shared.lua" )
+include( "shared.lua" )
 
+local FLY_BY = Sound( "killstreak_misc/jet_fly_by.wav" )
+local RADIUS  = 500
 
-include( 'shared.lua' )
-
-
-local FLY_BY = Sound( "killstreak_misc/jet_fly_by.wav" );
-
-
-local RADIUS = 500;
-
-
-ENT.dropPos = NULL;
-ENT.Model = Model("models/military2/air/air_f35_l.mdl")
-ENT.ground = 0;
-ENT.dropDelay = CurTime();
-ENT.droppedBombset1 = false;
-ENT.droppedBombset2 = false;
-ENT.bomb = NULL;
-ENT.bomb2 = NULL;
-ENT.bomb3 = NULL;
-ENT.bomb4 = NULL;
-ENT.DropDaBomb = false;
-ENT.StartAngle = NULL;
-ENT.WasInWorld = false;
+ENT.dropPos           = NULL
+ENT.Model             = Model( "models/military2/air/air_f35_l.mdl" )
+ENT.ground            = 0
+-- FIX: ENT.dropDelay = CurTime() at table-def scope (stale) -> 0
+ENT.dropDelay         = 0
+ENT.droppedBombset1   = false
+ENT.droppedBombset2   = false
+ENT.bomb              = NULL
+ENT.bomb2             = NULL
+ENT.bomb3             = NULL
+ENT.bomb4             = NULL
+ENT.DropDaBomb        = false
+ENT.StartAngle        = NULL
+ENT.WasInWorld        = false
 
 
 function ENT:PhysicsUpdate()
-	
-	
-	self.PhysObj:SetVelocity(self:GetForward()*7000)
-	self:SetPos(Vector(self:GetPos().x, self:GetPos().y, self.ground));
+	self.PhysObj:SetVelocity( self:GetForward() * 7000 )
+	self:SetPos( Vector( self:GetPos().x, self:GetPos().y, self.ground ) )
+	self:SetAngles( self.StartAngle )
 
-	self:SetAngles(self.StartAngle)
-
-	if( !self:IsInWorld() && self.WasInWorld) then
-		self:Remove();
+	if not self:IsInWorld() and self.WasInWorld then
+		self:Remove()
 	end
-	
-	if !self.WasInWorld && self:IsInWorld() then
-		self.WasInWorld = true;
+	if not self.WasInWorld and self:IsInWorld() then
+		self.WasInWorld = true
 	end
 
-	
-	if( self:FindDropZone(self.dropPos) && self.dropDelay < CurTime()) && (!self.droppedBombset1 || !self.droppedBombset2) then
-		
-		
-		self:EmitSound( FLY_BY, 100 )	//	PLAY THE APPROPRIATE SOUND AS THE JET FLIES BY
-		
-		
-		self.dropDelay = CurTime() + 0.1;
-		
-	
+	if self:FindDropZone( self.dropPos ) and self.dropDelay < CurTime() and ( not self.droppedBombset1 or not self.droppedBombset2 ) then
+		self:EmitSound( FLY_BY, 100 )
+		self.dropDelay = CurTime() + 0.1
 		self:DropBomb()
-		
-		
 	end
-	
-	
 end
 
 
-function ENT:MW2_Init()	
-	
-	
-	self.StartPos = self:GetVar("WallLocation", NULL);
-	self.FlyAng = self:GetVar("FlyAngle", NULL);
+function ENT:MW2_Init()
+	-- FIX: self:GetVar('WallLocation'/'FlyAngle'/'JetDropZone') dead API -> GetNWVector/GetNWAngle
+	self.StartPos = self:GetNWVector( "WallLocation", NULL )
+	self.FlyAng   = self:GetNWAngle(  "FlyAngle",    NULL )
+	self.dropPos  = self:GetNWVector( "JetDropZone",  NULL )
+	self.ground   = self:findGround() + 2000
 
-	self.dropPos = self:GetVar("JetDropZone", NULL)
-	self.ground = self:findGround() + 2000;
-	
-	
-	if self.StartPos != NULL && self.FlyAng != NULL then
-		self.spawnZone = Vector(self.StartPos.x, self.StartPos.y, self.ground);
-		self.StartAngle = self.FlyAng;
+	if self.StartPos != NULL and self.FlyAng != NULL then
+		self.spawnZone  = Vector( self.StartPos.x, self.StartPos.y, self.ground )
+		self.StartAngle = self.FlyAng
 	else
-		local x,x2 = self:FindBounds(true)
-		self.spawnZone = Vector(x,self.dropPos.y,self.ground);
-		self.StartAngle = Angle(0, 180, 0);
-		self.Owner:SetNetworkedVector("Harrier_Spawn_Pos", self.spawnZone);
-	end			
-	self.Entity:SetPos(self.spawnZone )
-	self.Entity:SetAngles( self.StartAngle )
-	
-	
+		local x, x2    = self:FindBounds( true )
+		self.spawnZone  = Vector( x, self.dropPos.y, self.ground )
+		self.StartAngle = Angle( 0, 180, 0 )
+		-- FIX: SetNetworkedVector -> SetNWVector
+		self.Owner:SetNWVector( "Harrier_Spawn_Pos", self.spawnZone )
+	end
+
+	-- FIX: self.Entity:SetPos/SetAngles -> self:XXX
+	self:SetPos( self.spawnZone )
+	self:SetAngles( self.StartAngle )
+
 	self:FindMinHeight()
-	self.spawnZone.z = self:FindMinHeight();
-	self.Entity:SetPos(self.spawnZone )	
+	self.spawnZone.z = self:FindMinHeight()
+	self:SetPos( self.spawnZone )
 	self:SpawnBombs()
 
-	constraint.NoCollide( self.Entity, game.GetWorld(), 0, 0 );	
+	-- FIX: constraint.NoCollide(self.Entity,...) -> self
+	constraint.NoCollide( self, game.GetWorld(), 0, 0 )
 	self.PhysgunDisabled = true
-
-
 end
 
 
-ENT.BombPos = { Vector(-149, 99, -21), Vector(-149, -99, -21), Vector(-176, 144, -21), Vector(-176, -144, -21) };
-ENT.Bombs = {};
+ENT.BombPos = { Vector( -149, 99, -21 ), Vector( -149, -99, -21 ), Vector( -176, 144, -21 ), Vector( -176, -144, -21 ) }
+ENT.Bombs   = {}
 function ENT:SpawnBombs()
 	local bombSent = "sent_air_strike_cluster"
-	for k,v in pairs( self.BombPos ) do
-		local bomb = ents.Create( bombSent );
-		bomb:SetPos( self:LocalToWorld(v) )
-		bomb:SetAngles(self:GetAngles());
-		bomb:SetVar("owner",self.Owner)
-		bomb:SetVar("FromCarePackage", self:GetVar("FromCarePackage",false))
-		bomb:Spawn();
-		bomb:SetNotSolid(true);		
-		constraint.NoCollide( self, bomb, 0, 0 );
-		constraint.Weld(self, bomb, 0,0,0, false)	
+	for _, v in pairs( self.BombPos ) do
+		local bomb = ents.Create( bombSent )
+		bomb:SetPos( self:LocalToWorld( v ) )
+		bomb:SetAngles( self:GetAngles() )
+		-- FIX: bomb:SetVar('owner'/'FromCarePackage') dead API -> direct table assign
+		bomb.Owner           = self.Owner
+		bomb.FromCarePackage = self:GetNWBool( "FromCarePackage", false )
+		bomb:Spawn()
+		bomb:SetNotSolid( true )
+		constraint.NoCollide( self, bomb, 0, 0 )
+		constraint.Weld( self, bomb, 0, 0, 0, false )
 		bomb.PhysgunDisabled = true
-		
-		table.insert(self.Bombs, bomb)
+		table.insert( self.Bombs, bomb )
 	end
 end
+
 
 function ENT:FindMinHeight()
-	local startPos = self:GetPos()
-	local endPos = startPos + ( self:GetForward() * 1000000)
-	local filterList = {self}
-	
-	local trace = {}
-	trace.start = startPos;
-	trace.endpos = endPos;
-	trace.filter = filterList;
-
-	local traceData;
-	local bool = true;
-	local maxNumber = 0;
-	local skyLocation = -1;
+	local startPos   = self:GetPos()
+	local filterList = { self }
+	local trace = {
+		start  = startPos,
+		endpos = startPos + ( self:GetForward() * 1000000 ),
+		filter = filterList
+	}
+	local bool        = true
+	local maxNumber   = 0
+	local skyLocation = -1
 	while bool do
-		traceData = util.TraceLine(trace);
-		if traceData.HitSky then
-			skyLocation = traceData.HitPos.z;
-			bool = false;
-		elseif traceData.HitWorld then
-			local loc = traceData.HitPos 
-
-			local skytrace = {}
-			skytrace.start = Vector( loc.x, loc.y, self.Sky )
-			skytrace.endpos = loc
-			local tr = util.TraceLine(skytrace)
-
-			local hit = tr.HitPos + Vector(0,0, 500);
-			
-			trace.start = hit.z;
-			trace.endpos = hit.z;
-		else 
-			table.insert(filterList, traceData.Entity)
+		local td = util.TraceLine( trace )
+		if td.HitSky then
+			skyLocation = td.HitPos.z
+			bool = false
+		elseif td.HitWorld then
+			local loc = td.HitPos
+			local skytrace = { start = Vector( loc.x, loc.y, self.Sky ), endpos = loc }
+			local tr  = util.TraceLine( skytrace )
+			local hit = tr.HitPos + Vector( 0, 0, 500 )
+			trace.start  = hit
+			trace.endpos = hit
+		else
+			table.insert( filterList, td.Entity )
 		end
-			
+		maxNumber = maxNumber + 1
 		if maxNumber >= 300 then
-			MsgN("Reached max number here, no luck in finding a skyBox");
-			bool = false;
+			MsgN( "[MW2 Killstreaks] Jet FindMinHeight: max iterations reached" )
+			bool = false
 		end
-		maxNumber = maxNumber + 1;
 	end
-	
-	if self:GetPos().z > skyLocation then 
-		return self:GetPos().z;
-	end
-	
-	return skyLocation;	
+	if self:GetPos().z > skyLocation then return self:GetPos().z end
+	return skyLocation
 end
 
-function ENT:OnTakeDamage( dmginfo )
-end
+
+function ENT:OnTakeDamage( dmginfo ) end
+
 
 function ENT:FindDropZone( VECTOR )
-	
-	
-	local jetPos = self.Entity:GetPos();
-	
-	
-	local DISTANCE = jetPos - self.dropPos;
-	
-	
-	if math.abs(DISTANCE.x) <= RADIUS && math.abs(DISTANCE.y) <= RADIUS then
-		
-		
-		return true;
-	
-	
+	-- FIX: self.Entity:GetPos -> self:GetPos
+	local jetPos   = self:GetPos()
+	local DISTANCE = jetPos - self.dropPos
+	if math.abs( DISTANCE.x ) <= RADIUS and math.abs( DISTANCE.y ) <= RADIUS then
+		return true
 	end
-	
-	
-	return false;
-
-
+	return false
 end
 
-/*
-
-function playHarrierInboundSound()
-	local teamType = "";
-	
-	if GetGlobalString("MW2_Harrier_Player") == LocalPlayer():GetName() then
-		teamType = "friendly";
-	else 
-		teamType = "enemy";
-	end
-	surface.PlaySound("killstreak_rewards/ac-130_" .. teamType .. "_inbound" .. LocalPlayer():GetNetworkedString("MW2TeamSound") ..  ".mp3")	
-end
-
-*/
 
 function ENT:DropBomb()
-	if !self.droppedBombset1 then	
-		for i=1,2 do 
+	if not self.droppedBombset1 then
+		for i = 1, 2 do
 			local bomb = self.Bombs[i]
-			constraint.RemoveConstraints(bomb, "Weld")
-			bomb:SetNotSolid(false);
-		
-			bomb:GetPhysicsObject():SetVelocity(Vector(0,0,0));
-		
-			bomb:SetVar("HasBeenDropped",true);
-			
+			constraint.RemoveConstraints( bomb, "Weld" )
+			bomb:SetNotSolid( false )
+			bomb:GetPhysicsObject():SetVelocity( Vector( 0, 0, 0 ) )
+			-- FIX: bomb:SetVar('HasBeenDropped') dead API -> direct assign
+			bomb.HasBeenDropped = true
 		end
 		table.remove( self.Bombs, 2 )
 		table.remove( self.Bombs, 1 )
-		self.droppedBombset1 = true;
-	elseif !self.droppedBombset2 then
-		for i=1,2 do 
+		self.droppedBombset1 = true
+	elseif not self.droppedBombset2 then
+		for i = 1, 2 do
 			local bomb = self.Bombs[i]
-			constraint.RemoveConstraints(bomb, "Weld")
-			bomb:SetNotSolid(false);
-		
-			bomb:GetPhysicsObject():SetVelocity(Vector(0,0,0));
-		
-			bomb:SetVar("HasBeenDropped",true);
-			
+			constraint.RemoveConstraints( bomb, "Weld" )
+			bomb:SetNotSolid( false )
+			bomb:GetPhysicsObject():SetVelocity( Vector( 0, 0, 0 ) )
+			bomb.HasBeenDropped = true
 		end
 		table.remove( self.Bombs, 2 )
 		table.remove( self.Bombs, 1 )
-		self.droppedBombset2 = true;
+		self.droppedBombset2 = true
 	end
 end
