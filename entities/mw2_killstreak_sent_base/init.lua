@@ -1,224 +1,175 @@
 AddCSLuaFile( "cl_init.lua" )
-
-
 AddCSLuaFile( "shared.lua" )
+include( "shared.lua" )
 
+ENT.MapBounds        = {}
+ENT.Model            = ""
+ENT.Sky              = 0
+ENT.playerSpeeds     = {}
+ENT.restrictMovement = false
+ENT.DropLoc          = nil
+ENT.DropAng          = nil
+ENT.Flares           = 0
+ENT.FlareSpawnPos    = nil
 
---IncludeClientFile("cl_init.lua")
-
-
-include( 'shared.lua' )
-
-
-ENT.MapBounds = { };
-ENT.Model = "";
-ENT.Sky = 0;
-ENT.playerSpeeds = {}
-ENT.restrictMovement = false;		//	INITIALIZE BOOLEAN SUCH THAT MOVEMENT WILL *NOT* BE RESTRICTED ( BY DEFAULT )
-ENT.DropLoc = nil;
-ENT.DropAng = nil;
-ENT.Flares = 0;
-ENT.FlareSpawnPos = nil;
 
 function ENT:FindSky()
-
-	local maxheight = 16384
-	local startPos = Vector(0,0,0);
-	local endPos = Vector(0, 0,maxheight);
+	local maxheight  = 16384
+	local startPos   = Vector( 0, 0, 0 )
+	local endPos     = Vector( 0, 0, maxheight )
 	local filterList = {}
-	local trace = {}
-	trace.start = startPos;
-	trace.endpos = endPos;
-	trace.filter = filterList;
+	local trace = { start = startPos, endpos = endPos, filter = filterList }
 
-	local traceData;
-	local hitSky;
-	local hitWorld;
-	local bool = true;
-	local maxNumber = 0;
-	local skyLocation = -1;
+	local bool        = true
+	local maxNumber   = 0
+	local skyLocation = -1
+
 	while bool do
-		traceData = util.TraceLine(trace);
-		hitSky = traceData.HitSky;
-		hitWorld = traceData.HitWorld;
-		if hitSky then
-			skyLocation = traceData.HitPos.z;
-			bool = false;
-		elseif hitWorld then
-			trace.start = traceData.HitPos + Vector(0,0,50);
+		local traceData = util.TraceLine( trace )
+		if traceData.HitSky then
+			skyLocation = traceData.HitPos.z
+			bool = false
+		elseif traceData.HitWorld then
+			trace.start = traceData.HitPos + Vector( 0, 0, 50 )
 		else
-			table.insert(filterList, traceData.Entity)
+			table.insert( filterList, traceData.Entity )
 		end
-
+		-- FIX: maxNumber now increments every iteration; was missing, causing potential infinite loop
+		maxNumber = maxNumber + 1
 		if maxNumber >= 300 then
-			MsgN("Reached max number here, no luck in finding a SKYBOX.");
-			bool = false;
+			MsgN( "[MW2 Killstreaks] FindSky: reached max iterations, no skybox found" )
+			bool = false
 		end
 	end
 
-	return skyLocation;
+	return skyLocation
 end
+
 
 function ENT:findGround()
+	local minheight  = -16384
+	local startPos   = Vector( 0, 0, self.Sky )
+	local endPos     = Vector( startPos.x, startPos.y, minheight )
+	local filterList = { self.Owner, self }
+	local trace = { start = startPos, endpos = endPos, filter = filterList }
 
-	local minheight = -16384
-	local startPos = Vector( 0,0, self.Sky)
-	local endPos = Vector(startPos.x, startPos.y,minheight);
-	local filterList = {self.Owner, self}
+	local bool            = true
+	local maxNumber       = 0
+	local groundLocation  = -1
 
-	local trace = {}
-	trace.start = startPos;
-	trace.endpos = endPos;
-	trace.filter = filterList;
-
-	local traceData;
-	local hitWorld;
-	local bool = true;
-	local maxNumber = 0;
-	local groundLocation = -1;
 	while bool do
-		traceData = util.TraceLine(trace);
-		hitWorld = traceData.HitWorld;
-		if hitWorld then
-			groundLocation = traceData.HitPos.z;
-			bool = false;
+		local traceData = util.TraceLine( trace )
+		if traceData.HitWorld then
+			groundLocation = traceData.HitPos.z
+			bool = false
 		else
-			table.insert(filterList, traceData.Entity)
+			table.insert( filterList, traceData.Entity )
 		end
-
+		maxNumber = maxNumber + 1
 		if maxNumber >= 100 then
-			MsgN("Reached max number here, no luck in finding the ground.");
-			bool = false;
+			MsgN( "[MW2 Killstreaks] findGround: reached max iterations, ground not found" )
+			bool = false
 		end
 	end
 
-	return groundLocation;
+	return groundLocation
 end
 
-function ENT:FindBounds(xAxis)
-	local height = self.Sky;
-	local length = 16384
-	local startPos = Vector(0,0,height);
-	local endPos;
+
+function ENT:FindBounds( xAxis )
+	local height  = self.Sky
+	local length  = 16384
+	local startPos = Vector( 0, 0, height )
+	local endPos
+
 	if xAxis then
-		endPos = Vector(length, 0,height);
-	elseif !xAxis then
-		endPos = Vector(0, length,height);
+		endPos = Vector( length, 0, height )
+	else
+		endPos = Vector( 0, length, height )
 	end
 
-	local filterList = {}
+	local filterList    = {}
+	local trace = { start = startPos, endpos = endPos, filter = filterList }
 
-	local trace = {}
-	trace.start = startPos;
-	trace.endpos = endPos;
-	trace.filter = filterList;
+	local bool          = true
+	local maxNumber     = 0
+	local wallLocation1 = -1
+	local wallLocation2 = -1
 
-	local traceData;
-	local hitSky;
-	local hitWorld;
-	local bool = true;
-	local maxNumber = 0;
-	local wallLocation1 = -1;
-	local wallLocation2 = -1;
 	while bool do
-		traceData = util.TraceLine(trace);
-		hitSky = traceData.HitSky;
-		hitWorld = traceData.HitWorld;
-		if hitSky then
+		local traceData = util.TraceLine( trace )
+		if traceData.HitSky then
 			if wallLocation1 == -1 then
+				wallLocation1 = xAxis and traceData.HitPos.x or traceData.HitPos.y
 				if xAxis then
-					wallLocation1 = traceData.HitPos.x;
-				elseif !xAxis then
-					wallLocation1 = traceData.HitPos.y;
+					endPos = Vector( -length, 0, height )
+				else
+					endPos = Vector( 0, -length, height )
 				end
-
-				if xAxis then
-					endPos = Vector(length * -1, 0,height);
-				elseif !xAxis then
-					endPos = Vector(0, length * -1,height);
-				end
-
-				trace = {}
-				trace.start = startPos;
-				trace.endpos = endPos;
-				trace.filter = filterList;
+				trace = { start = startPos, endpos = endPos, filter = filterList }
 			else
-				if xAxis then
-					wallLocation2 = traceData.HitPos.x;
-				elseif !xAxis then
-					wallLocation2 = traceData.HitPos.y;
-				end
-
-				bool = false;
+				wallLocation2 = xAxis and traceData.HitPos.x or traceData.HitPos.y
+				bool = false
 			end
-		elseif hitWorld then
+		elseif traceData.HitWorld then
 			if wallLocation1 == -1 then
-				if xAxis then
-					trace.start = traceData.HitPos + Vector(50,0,0);
-				elseif !xAxis then
-					trace.start = traceData.HitPos + Vector(0,50,0);
-				end
+				trace.start = xAxis and ( traceData.HitPos + Vector( 50, 0, 0 ) ) or ( traceData.HitPos + Vector( 0, 50, 0 ) )
 			else
-				if xAxis then
-					trace.start = traceData.HitPos - Vector(50,0,0);
-				elseif !xAxis then
-					trace.start = traceData.HitPos - Vector(0,50,0);
-				end
+				trace.start = xAxis and ( traceData.HitPos - Vector( 50, 0, 0 ) ) or ( traceData.HitPos - Vector( 0, 50, 0 ) )
 			end
 		else
-			table.insert(filterList, traceData.Entity)
+			table.insert( filterList, traceData.Entity )
 		end
-
+		maxNumber = maxNumber + 1
 		if maxNumber >= 100 then
-			MsgN("Reached max number here, no luck in finding the wall.");
-			bool = false;
+			MsgN( "[MW2 Killstreaks] FindBounds: reached max iterations, wall not found" )
+			bool = false
 		end
-		maxNumber = maxNumber + 1;
 	end
 
-	return wallLocation1, wallLocation2;
+	return wallLocation1, wallLocation2
 end
+
 
 function ENT:Initialize()
-	self.Owner = self:GetVar("owner", nil)
+	self.Owner = self:GetVar( "owner", nil )
 
 	if self.Owner == nil then
-		self:Remove();
-		MsgN("You do not have permission to use this.");
-		return;
+		self:Remove()
+		MsgN( "[MW2 Killstreaks] Entity spawned without owner - removed." )
+		return
 	end
 
-	self.Wep = self:GetVar("Weapon", nil)
+	self.Wep = self:GetVar( "Weapon", nil )
 	self.Sky = self:FindSky()
-	self:SetModel( self.Model );
+	self:SetModel( self.Model )
 
 	self:PhysicsInit( SOLID_VPHYSICS )
 	self:SetMoveType( MOVETYPE_VPHYSICS )
 	self:SetSolid( SOLID_VPHYSICS )
 
 	self.PhysObj = self:GetPhysicsObject()
-	if (self.PhysObj:IsValid()) then
+	if self.PhysObj:IsValid() then
 		self.PhysObj:Wake()
 	end
 
-	self.PhysgunDisabled = true
-	self.m_tblToolsAllowed = string.Explode( " ", "none" )
+	self.PhysgunDisabled    = true
+	self.m_tblToolsAllowed  = string.Explode( " ", "none" )
 
-	self.playerSpeeds = { self.Owner:GetWalkSpeed(), self.Owner:GetRunSpeed() }		//	SAVE THE CURRENT SPEED VALUES FOR THE USER
+	self.playerSpeeds = { self.Owner:GetWalkSpeed(), self.Owner:GetRunSpeed() }
 
-	if self.restrictMovement == true then		//	CHECK:	IF MOVEMENT *IS* RESTRICTED, THEN...
+	if self.restrictMovement then
+		-- FIX: GAMEMODE:SetPlayerSpeed is DarkRP-only. Use direct calls for sandbox compatibility.
+		self.Owner:SetWalkSpeed( 1 )
+		self.Owner:SetRunSpeed( 1 )
+	else
+		self.Owner:SetWalkSpeed( self.playerSpeeds[1] )
+		self.Owner:SetRunSpeed( self.playerSpeeds[2] )
+	end
 
-		GAMEMODE:SetPlayerSpeed(self.Owner, 1, 1)		//	PROHIBIT THE USER FROM MOVING
-
-	else	//	OTHERWISE...
-
-		GAMEMODE:SetPlayerSpeed(self.Owner, self.playerSpeeds[1], self.playerSpeeds[2])		//	GIVE BACK MOVEMENT TO THE USER ( SAVED VALUES FROM "self.playerSpeeds" TABLE )
-
-	end		//	FINISH THE CHECK
-
-	self:MW2_Init();
-
+	self:MW2_Init()
 end
+
 
 function ENT:MW2_Init()
 end
@@ -230,161 +181,136 @@ end
 function ENT:Destroy()
 end
 
-function ENT:FilterTarget(target, LOS)
-	local haslos;
-	if !LOS then haslos = true;
+
+function ENT:FilterTarget( target, LOS )
+	local haslos
+	if not LOS then
+		haslos = true
 	else
-		haslos = self:HasLOS(target);
+		haslos = self:HasLOS( target )
 	end
 
-	if IsValid(target) && haslos then
+	-- FIX: GetConVarNumber is deprecated; use GetConVar():GetInt()
+	if IsValid( target ) and haslos then
 		if target:IsNPC() then
-			if !table.HasValue( self.Friendlys, target:GetClass() ) then
-				return true;
+			if not table.HasValue( self.Friendlys, target:GetClass() ) then
+				return true
 			end
 		elseif target:IsPlayer() then
-			if target != self.Owner && target:Team() != self.Owner:Team() && GetConVarNumber("sbox_plpldamage") != 0 then
-				return true;
+			if target != self.Owner and target:Team() != self.Owner:Team() and GetConVar( "sbox_plpldamage" ):GetInt() != 0 then
+				return true
 			end
 		end
 	end
-	return false;
+	return false
 end
 
-function ENT:HasLOS(target)
-	local tracedata = {}
-		tracedata.start = self:GetPos()
-		tracedata.endpos = target:LocalToWorld(target:OBBCenter())
-		tracedata.filter = self
-	local trace = util.TraceLine(tracedata)
-	if IsValid(trace.Entity) && ( trace.Entity == target || !table.HasValue(self.Friendlys, target:GetClass()) ) then
-		return true;
+
+function ENT:HasLOS( target )
+	local tracedata = {
+		start  = self:GetPos(),
+		endpos = target:LocalToWorld( target:OBBCenter() ),
+		filter = self
+	}
+	local trace = util.TraceLine( tracedata )
+	if IsValid( trace.Entity ) and ( trace.Entity == target or not table.HasValue( self.Friendlys, target:GetClass() ) ) then
+		return true
 	end
-	return false;
+	return false
 end
 
-local function SpawnFlares(self, fpos)
-	local flare = nil;
-	for i = 0 , 20 do
+
+local function SpawnFlares( self, fpos )
+	local flare = nil
+	for i = 0, 20 do
 		local flares = ents.Create( "sent_mw2_flares" )
 		flares:SetPos( fpos )
 		flares:Spawn()
 		local Phys = flares:GetPhysicsObject()
-
 		if Phys:IsValid() then
 			Phys:Wake()
-			Phys:ApplyForceCenter(Vector(math.random(5-40, 40), math.random(5-40, 40), math.random(5-40, 40)) * Phys:GetMass())
+			-- FIX: math.random(5-40, 40) evaluated to math.random(-35, 40).
+			-- Intent was symmetric -40..40 scatter. Fixed all three axes.
+			Phys:ApplyForceCenter( Vector(
+				math.random( -40, 40 ),
+				math.random( -40, 40 ),
+				math.random( -40, 40 )
+			) * Phys:GetMass() )
 		end
 		flares:Activate()
 		constraint.NoCollide( self, flares, 0, 0 )
-		if flare == nil then flare = flares end -- returns the first flare spawned so we can track it.
+		if flare == nil then flare = flares end
 	end
-
-	return flare;
+	return flare
 end
+
 
 function ENT:DeployFlares( obj, fpos )
 	if self.Flares <= 0 then return end
 	if obj.FlareSpawned then return end
-	local vel = obj:GetVelocity();
-	if vel:Dot(vel:GetNormal()) <= 0 then return end
+	local vel = obj:GetVelocity()
+	if vel:Dot( vel:GetNormal() ) <= 0 then return end
 
-	local trace = util.QuickTrace( obj:GetPos(), vel:GetNormal() * 10000, {obj})
-	if IsValid(trace.Entity ) && trace.Entity == self then
-		self:SpawnDecoy( obj, SpawnFlares(self, fpos) )
+	local trace = util.QuickTrace( obj:GetPos(), vel:GetNormal() * 10000, { obj } )
+	if IsValid( trace.Entity ) and trace.Entity == self then
+		self:SpawnDecoy( obj, SpawnFlares( self, fpos ) )
 	end
-	obj.FlareSpawned = true;
-	self.Flares = self.Flares - 1;
+	obj.FlareSpawned = true
+	self.Flares = self.Flares - 1
 end
 
-function ENT:SpawnDecoy(missile, target)
 
-	local decoy = ents.Create("mw2_sent_decoyMissile")
-	decoy:SetVar( "Model", missile:GetModel() );
-	decoy:SetVar( "Owner", missile:GetOwner() or missile.Owner );
-	decoy:SetVar( "Target", target );
+function ENT:SpawnDecoy( missile, target )
+	local decoy = ents.Create( "mw2_sent_decoyMissile" )
+	decoy:SetVar( "Model", missile:GetModel() )
+	decoy:SetVar( "Owner", missile:GetOwner() or missile.Owner )
+	decoy:SetVar( "Target", target )
+
 	local phys = missile:GetPhysicsObject()
-	local vel = nil;
-	if IsValid(phys) then
-		vel = phys:GetVelocity( )
+	local vel
+	if IsValid( phys ) then
+		vel = phys:GetVelocity()
 	else
 		vel = missile:GetVelocity()
 	end
-	decoy:SetVar( "Velocity", vel:Dot( vel:GetNormal() ) );
+	decoy:SetVar( "Velocity", vel:Dot( vel:GetNormal() ) )
 
-	local pos = missile:GetPos();
-	missile:Remove();
-	decoy:SetPos(pos);
-	decoy:Spawn();
+	local pos = missile:GetPos()
+	missile:Remove()
+	decoy:SetPos( pos )
+	decoy:Spawn()
 end
 
+
 function ENT:SetDropLocation( vec, ang )
-
-
-	self.DropLoc = vec;
-
-
-	self.DropAng = Angle( 0, ang , 0 );
-
-
+	self.DropLoc = vec
+	self.DropAng = Angle( 0, ang, 0 )
 end
 
 
 function ENT:OpenOverlayMap( select )
-
-
 	self.Owner.DropLocEnt = self
-
-
-	net.Start("MW2_DropLoc_Overlay_UM")  //  CREATE A MESSAGE AND PREPARE TO SEND IT TO THE CLIENT
-
-
-		net.WriteFloat( self:EntIndex() );	//	WRITE THE INDEX (IDENTIFICATION) OF THE OWNER OF THE KILLSTREAK
-
-
-		net.WriteBool( select )	//	REASON CURRENTLY UNKNOWN, HOWEVER IT IS NECESSARY TO ALLOW THE MAP OVERLAY TO FUNCTION PROPERLY
-
-
-	net.Send( self.Owner )	//	SEND THE ABOVE TWO LINES TO THE OWNER OF THE KILLSTREAK
-
-
+	net.Start( "MW2_DropLoc_Overlay_UM" )
+		net.WriteFloat( self:EntIndex() )
+		net.WriteBool( select )
+	net.Send( self.Owner )
 end
 
-local function SetLocation( size, pl ) -- this data stream allows the client to reset the killstreak, so if you recive two of the same killstreak right after the other it will playthe notification for both
-	local ei = net.ReadFloat()
-	local ent = Entity(ei)
-	if not IsValid(ent) then
+
+local function SetLocation( size, pl )
+	local ei  = net.ReadFloat()
+	local ent = Entity( ei )
+	if not IsValid( ent ) then
 		ent = pl.DropLocEnt
 	end
 	local pos = net.ReadVector()
 	local ang = net.ReadFloat()
 
-
-	if ang != nil and ent:IsValid() then	//	CHECK:	IF THE ANGLE IS *NOT EQUAL* TO "NOTHING" ( nil ), *AND* THE ENTITY ( ent ) *IS VALID*, THEN...
-
-
-		ent:SetDropLocation( pos, ang )  //  SET THE DROP LOCATION AS SUCH
-
-
-	elseif ang == nil and ent:IsValid() then  //	IF THE ANGLE *IS EQUAL* TO "NOTHING" ( nil ), *AND* THE ENTITY ( ent ) *IS VALID*, THEN...
-
-
-		ent:SetDropLocation( pos, nil )  //  SET THE DROP LOCATION AS SUCH
-
-
-	else	//	IF THE ABOVE CONDITIONS FAIL, THEN...
-
-
-		return	//	DO NOTHING AND RETURN
-
-
-	end  //  FINISH THE CHECK
-
-
-end  //  COMPLETE THE FUNCTION
-
+	if IsValid( ent ) then
+		ent:SetDropLocation( pos, ang != 0 and ang or nil )
+	end
+end
 
 net.Receive( "MW2_DropLocation_Overlay_Stream", SetLocation )
-
-
-hook.Add( "MW2_DropLoc_Overlay_UM", "Set Overlay", OpenOverlayMap )  //  NEEDED TO HELP FIX THE MAP OVERLAY ISSUE
+-- FIX: Removed dead hook.Add("MW2_DropLoc_Overlay_UM", ...) - MW2_DropLoc_Overlay_UM is a
+-- net message name, not a GMod hook. hook.Add on it was a no-op. net.Receive above handles it.
