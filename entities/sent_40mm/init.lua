@@ -1,66 +1,64 @@
-include( 'shared.lua' )
-AddCSLuaFile( 'shared.lua' )
+include( "shared.lua" )
+AddCSLuaFile( "shared.lua" )
 
-ENT.ExplosionSound = Sound("killstreak_explosions/40_explosion.wav")
+ENT.ExplosionSound = Sound( "killstreak_explosions/40_explosion.wav" )
+
 
 function ENT:PhysicsUpdate()
-	self.PhysObj:SetVelocity(self.Entity:GetForward() * 5500)
+	-- FIX: self.Entity:GetForward -> self:GetForward
+	self.PhysObj:SetVelocity( self:GetForward() * 5500 )
 end
 
-function ENT:Initialize()	
-	self.Entity:SetModel( "models/military2/missile/missile_s300.mdl" );
-	self.Owner = self.Entity:GetVar("owner",Entity(1))	
-	self.Entity:PhysicsInit( SOLID_VPHYSICS )
-	self.Entity:SetMoveType( MOVETYPE_VPHYSICS )	
-	self.Entity:SetSolid( SOLID_VPHYSICS )
 
-	self.PhysObj = self.Entity:GetPhysicsObject()
-	if (self.PhysObj:IsValid()) then
+function ENT:Initialize()
+	-- FIX: self.Entity:SetModel/PhysicsInit/SetMoveType/SetSolid -> self:XXX
+	-- FIX: self.Owner = self.Entity:GetVar('owner') dead API -> removed
+	self:SetModel( "models/military2/missile/missile_s300.mdl" )
+	self:PhysicsInit( SOLID_VPHYSICS )
+	self:SetMoveType( MOVETYPE_VPHYSICS )
+	self:SetSolid( SOLID_VPHYSICS )
+
+	-- FIX: self.Entity:GetPhysicsObject -> self:GetPhysicsObject
+	self.PhysObj = self:GetPhysicsObject()
+	if self.PhysObj:IsValid() then
 		self.PhysObj:Wake()
 	end
 
-	timer.Simple(.5, function() 	
-		for k,v in pairs(player.GetAll()) do
-			local pos = v:GetPos()
-			sound.Play("ac-130_kill_sounds/40mminair.wav",pos,180,100,1)
-		--EmitSound( string soundName, Vector position, Entity entity, number channel, number volume, number soundLevel, number soundFlags, number pitch )
+	timer.Simple( 0.5, function()
+		for _, v in pairs( player.GetAll() ) do
+			sound.Play( "ac-130_kill_sounds/40mminair.wav", v:GetPos(), 180, 100, 1 )
 		end
-	 end)
+	end )
 end
+
 
 function ENT:PhysicsCollide( data, physobj )
-	
-	
 	if data.Speed > 50 and data.DeltaTime > 0.15 then
-		
-		
 		self:Explosion()
-		
-		
 		self:Remove()
-		
-		
 	end
-	
-	
 end
+
 
 function ENT:OnTakeDamage( dmginfo )
-	self.Entity:TakePhysicsDamage( dmginfo )	
+	-- FIX: self.Entity:TakePhysicsDamage -> self:TakePhysicsDamage
+	self:TakePhysicsDamage( dmginfo )
 end
 
+
 function ENT:Explosion()
-	
-	util.BlastDamage(self, self.Owner, self:GetPos(), 250, 250)
-	
-	self:EmitSound(self.ExplosionSound, 200,100)
-	
-	ParticleExplode = ents.Create("info_particle_system")
-	ParticleExplode:SetPos(self:GetPos())
-	ParticleExplode:SetKeyValue("effect_name", "40mm_explode") -- The names are cluster_explode, 40mm_explode, and agm_explode.
-	ParticleExplode:SetKeyValue("start_active", "1")
+	util.BlastDamage( self, self.Owner, self:GetPos(), 250, 250 )
+	self:EmitSound( self.ExplosionSound, 200, 100 )
+
+	-- FIX: ParticleExplode was global -> local
+	local ParticleExplode = ents.Create( "info_particle_system" )
+	ParticleExplode:SetPos( self:GetPos() )
+	ParticleExplode:SetKeyValue( "effect_name",  "40mm_explode" )
+	ParticleExplode:SetKeyValue( "start_active", "1" )
 	ParticleExplode:Spawn()
 	ParticleExplode:Activate()
-	ParticleExplode:Fire("kill", "", 20) -- Be sure to leave this at 20, or else the explosion may not be fully rendered because 2/3 of the effects have smoke that stays for a while.
-	util.ScreenShake( self.Entity:GetPos(), 15, 15, 0.5, 2000 )
+	ParticleExplode:Fire( "kill", "", 20 )
+
+	-- FIX: self.Entity:GetPos in ScreenShake -> self:GetPos
+	util.ScreenShake( self:GetPos(), 15, 15, 0.5, 2000 )
 end
